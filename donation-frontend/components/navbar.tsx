@@ -15,6 +15,7 @@ export default function Navbar() {
   const routes = [
     { href: "/", label: "Home" },
     { href: "/campaigns", label: "Campaigns" },
+    { href: "/dashboard", label: "My Donations" },
     { href: "/about", label: "About" },
     { href: "/contact", label: "Contact" },
   ]

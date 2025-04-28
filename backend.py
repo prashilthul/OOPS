@@ -1,167 +1,150 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
+import streamlit as st
 import defined__classes as dc
+from typing import List, Optional
+from datetime import datetime
 
-app = FastAPI()
-from fastapi.middleware.cors import CORSMiddleware
+# Initialize session state for in-memory storage if not exists
+if 'donors' not in st.session_state:
+    st.session_state.donors: List[dc.Donor] = []
+if 'managers' not in st.session_state:
+    st.session_state.managers: List[dc.CampaignManager] = []
+if 'campaigns' not in st.session_state:
+    st.session_state.campaigns: List[dc.FundraisingCampaign] = []
 
-origins = [
-    # "http://localhost:3000",   # React dev server
-    # "http://127.0.0.1:3000",   # or whatever port your frontend uses
-    # # you can also use "*" to allow all origins, but be careful in production
-    "*"
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins="*",
-    allow_credentials=True,
-    allow_methods=["*"],     # GET, POST, PUT, DELETE…
-    allow_headers=["*"],     # Authorization, Content-Type, etc.
+# Set page config
+st.set_page_config(
+    page_title="Fundraising Campaign Manager",
+    page_icon="💰",
+    layout="wide"
 )
 
-@app.get("/")
-def read_root():
-    return {"message": "Backend running!"}
-# Data Models
-class DonorRequest(BaseModel):
-    name: str
-    email: str
+# Sidebar for navigation
+st.sidebar.title("Navigation")
+page = st.sidebar.selectbox("Choose a page", ["Home", "Donors", "Managers", "Campaigns", "Donations"])
 
-class CampaignRequest(BaseModel):
-    name: str
-    target_amount: float
-    manager_email: str
-
-class DonationRequest(BaseModel):
-    donor_email: str
-    campaign_id: str
-    amount: float
-
-# In-memory storage
-donors: List[dc.Donor] = []
-managers: List[dc.CampaignManager] = []
-campaigns: List[dc.FundraisingCampaign] = []
-
-# API Routes
-@app.post('/api/donors')
-async def create_donor(donor: DonorRequest):
-    new_donor = dc.Donor(donor.name, donor.email)
-    donors.append(new_donor)
-    return {"id": new_donor.id, "name": new_donor.name, "email": new_donor.email}  # Changed _id to id
-
-@app.post('/api/managers')
-async def create_manager(manager: DonorRequest):
-    new_manager = dc.CampaignManager(manager.name, manager.email)
-    managers.append(new_manager)
-    return {"id": new_manager.id, "name": new_manager.name, "email": new_manager.email}  # Changed _id to id
-
-@app.post('/api/campaigns')
-async def create_campaign(campaign: CampaignRequest):
-    manager = next((m for m in managers if m.email == campaign.manager_email), None)
-    if not manager:
-        raise HTTPException(status_code=404, detail="Manager not found")
+if page == "Home":
+    st.title("Fundraising Campaign Manager")
+    st.write("Welcome to the Fundraising Campaign Management System!")
     
-    new_campaign = manager.create_campaign(campaign.name, campaign.target_amount)
-    campaigns.append(new_campaign)
-    return {
-        "id": new_campaign.id,
-        "name": new_campaign.name,
-        "target_amount": new_campaign.target_amount,
-        "current_amount": new_campaign.current_amount,
-        "status": new_campaign.status
-    }
+    # Display summary statistics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Donors", len(st.session_state.donors))
+    with col2:
+        st.metric("Total Campaigns", len(st.session_state.campaigns))
+    with col3:
+        total_donations = sum(campaign.current_amount for campaign in st.session_state.campaigns)
+        st.metric("Total Donations", f"${total_donations:,.2f}")
 
-@app.post('/api/donations')
-async def create_donation(donation: DonationRequest):
-    donor = next((d for d in donors if d.email == donation.donor_email), None)
-    if not donor:
-        raise HTTPException(status_code=404, detail="Donor not found")
-
-    campaign = next((c for c in campaigns if c.id == donation.campaign_id), None)
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-
-    new_donation = donor.make_donation(donation.amount, campaign)
-    return {
-        "id": new_donation.id,
-        "amount": new_donation.amount,
-        "campaign": new_donation.campaign.name,
-        "donor": new_donation.donor.name,
-        "date": new_donation.date
-    }
-
-@app.get('/api/campaigns')
-async def get_campaigns(status: Optional[str] = None):
-    result = campaigns
-    if status:
-        result = [c for c in campaigns if c.status == status]
-    return [{
-        "id": c.id,
-        "name": c.name,
-        "target_amount": c.target_amount,
-        "current_amount": c.current_amount,
-        "status": c.status
-    } for c in result]
-
-@app.get('/api/donors/{donor_email}/donations')
-async def get_donor_donations(donor_email: str):
-    donor = next((d for d in donors if d.email == donor_email), None)
-    if not donor:
-        raise HTTPException(status_code=404, detail="Donor not found")
+elif page == "Donors":
+    st.title("Donor Management")
     
-    donations = donor.donations  
-    return [{
-        "id": d.id,
-        "amount": d.amount,
-        "campaign": d.campaign.name,
-        "date": d.date
-    } for d in donations]
-
-@app.get('/api/system/dump')
-async def get_system_data():
-    return {
-        "managers": [{
-            "id": m.id,
-            "name": m.name,
-            "email": m.email,
-            "role": m.get_role(),
-            "campaigns": [{
-                "id": c.id,
-                "name": c.name,
-                "target_amount": c.target_amount,
-                "current_amount": c.current_amount,
-                "status": c.status,
-                "remaining_amount": c.remaining_amount
-            } for c in m.campaigns]
-        } for m in managers],
+    # Add new donor
+    with st.form("new_donor"):
+        st.subheader("Add New Donor")
+        donor_name = st.text_input("Donor Name")
+        donor_email = st.text_input("Donor Email")
+        submit_donor = st.form_submit_button("Add Donor")
         
-        "donors": [{
-            "id": d.id,
-            "name": d.name,
-            "email": d.email,
-            "role": d.get_role(),
-            "total_donations": d.total_donations,
-            "donations": [{
-                "id": don.id,
-                "amount": don.amount,
-                "campaign_name": don.campaign.name,
-                "date": don.date
-            } for don in d.donations]
-        } for d in donors],
+        if submit_donor and donor_name and donor_email:
+            new_donor = dc.Donor(donor_name, donor_email)
+            st.session_state.donors.append(new_donor)
+            st.success(f"Donor {donor_name} added successfully!")
+    
+    # List donors
+    st.subheader("Existing Donors")
+    if st.session_state.donors:
+        for donor in st.session_state.donors:
+            with st.expander(f"Donor: {donor.name}"):
+                st.write(f"Email: {donor.email}")
+                st.write(f"Total Donations: ${donor.total_donations:,.2f}")
+                if donor.donations:
+                    st.write("Donation History:")
+                    for donation in donor.donations:
+                        st.write(f"- ${donation.amount:,.2f} to {donation.campaign.name} on {donation.date}")
+
+elif page == "Managers":
+    st.title("Campaign Manager Management")
+    
+    # Add new manager
+    with st.form("new_manager"):
+        st.subheader("Add New Manager")
+        manager_name = st.text_input("Manager Name")
+        manager_email = st.text_input("Manager Email")
+        submit_manager = st.form_submit_button("Add Manager")
         
-        "campaigns": [{
-            "id": c.id,
-            "name": c.name,
-            "target_amount": c.target_amount,
-            "current_amount": c.current_amount,
-            "status": c.status,
-            "remaining_amount": c.remaining_amount
-        } for c in campaigns]
-    }
+        if submit_manager and manager_name and manager_email:
+            new_manager = dc.CampaignManager(manager_name, manager_email)
+            st.session_state.managers.append(new_manager)
+            st.success(f"Manager {manager_name} added successfully!")
+    
+    # List managers
+    st.subheader("Existing Managers")
+    if st.session_state.managers:
+        for manager in st.session_state.managers:
+            with st.expander(f"Manager: {manager.name}"):
+                st.write(f"Email: {manager.email}")
+                st.write("Campaigns:")
+                for campaign in manager.campaigns:
+                    st.write(f"- {campaign.name} (${campaign.current_amount:,.2f}/{campaign.target_amount:,.2f})")
 
+elif page == "Campaigns":
+    st.title("Campaign Management")
+    
+    # Add new campaign
+    with st.form("new_campaign"):
+        st.subheader("Create New Campaign")
+        campaign_name = st.text_input("Campaign Name")
+        target_amount = st.number_input("Target Amount", min_value=0.0, step=100.0)
+        manager_email = st.selectbox(
+            "Select Manager",
+            options=[m.email for m in st.session_state.managers],
+            format_func=lambda x: next(m.name for m in st.session_state.managers if m.email == x)
+        )
+        submit_campaign = st.form_submit_button("Create Campaign")
+        
+        if submit_campaign and campaign_name and target_amount and manager_email:
+            manager = next(m for m in st.session_state.managers if m.email == manager_email)
+            new_campaign = manager.create_campaign(campaign_name, target_amount)
+            st.session_state.campaigns.append(new_campaign)
+            st.success(f"Campaign {campaign_name} created successfully!")
+    
+    # List campaigns
+    st.subheader("Active Campaigns")
+    if st.session_state.campaigns:
+        for campaign in st.session_state.campaigns:
+            with st.expander(f"Campaign: {campaign.name}"):
+                progress = campaign.current_amount / campaign.target_amount
+                st.progress(progress)
+                st.write(f"Target: ${campaign.target_amount:,.2f}")
+                st.write(f"Current: ${campaign.current_amount:,.2f}")
+                st.write(f"Status: {campaign.status}")
 
+elif page == "Donations":
+    st.title("Make a Donation")
+    
+    # Make new donation
+    with st.form("new_donation"):
+        st.subheader("Make New Donation")
+        donor_email = st.selectbox(
+            "Select Donor",
+            options=[d.email for d in st.session_state.donors],
+            format_func=lambda x: next(d.name for d in st.session_state.donors if d.email == x)
+        )
+        campaign_id = st.selectbox(
+            "Select Campaign",
+            options=[c.id for c in st.session_state.campaigns],
+            format_func=lambda x: next(c.name for c in st.session_state.campaigns if c.id == x)
+        )
+        amount = st.number_input("Donation Amount", min_value=0.0, step=10.0)
+        submit_donation = st.form_submit_button("Make Donation")
+        
+        if submit_donation and donor_email and campaign_id and amount:
+            donor = next(d for d in st.session_state.donors if d.email == donor_email)
+            campaign = next(c for c in st.session_state.campaigns if c.id == campaign_id)
+            new_donation = donor.make_donation(amount, campaign)
+            st.success(f"Donation of ${amount:,.2f} made successfully!")
+
+# Run the Streamlit app
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    st.sidebar.info("This is a Streamlit-based interface for the Fundraising Campaign Management System")
