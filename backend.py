@@ -4,7 +4,26 @@ from typing import List, Optional
 import defined__classes as dc
 
 app = FastAPI()
+from fastapi.middleware.cors import CORSMiddleware
 
+origins = [
+    # "http://localhost:3000",   # React dev server
+    # "http://127.0.0.1:3000",   # or whatever port your frontend uses
+    # # you can also use "*" to allow all origins, but be careful in production
+    "*"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins="*",
+    allow_credentials=True,
+    allow_methods=["*"],     # GET, POST, PUT, DELETE…
+    allow_headers=["*"],     # Authorization, Content-Type, etc.
+)
+
+@app.get("/")
+def read_root():
+    return {"message": "Backend running!"}
 # Data Models
 class DonorRequest(BaseModel):
     name: str
@@ -141,6 +160,7 @@ async def get_system_data():
             "remaining_amount": c.remaining_amount
         } for c in campaigns]
     }
+
 
 if __name__ == "__main__":
     import uvicorn

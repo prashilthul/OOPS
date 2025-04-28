@@ -1,7 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { campaigns } from "@/lib/data"
+import { useState, useEffect } from "react"
 import CampaignCard from "@/components/campaign-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -10,24 +9,41 @@ import { Slider } from "@/components/ui/slider"
 import { Search, Filter } from "lucide-react"
 
 export default function CampaignsPage() {
+  const [campaigns, setCampaigns] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [progressFilter, setProgressFilter] = useState([0])
   const [showFilters, setShowFilters] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const categories = ["All", "Education", "Health", "Environment", "Disaster Relief", "Animals"]
 
+  // Fetch campaigns from API
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/api/campaigns")  // <-- your FastAPI backend URL
+        const data = await response.json()
+        CONSONSOLE.LOG("HH")
+        setCampaigns(data)
+      } catch (error) {
+        console.error("Error fetching campaigns:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCampaigns()
+  }, [])
+
   const filteredCampaigns = campaigns.filter((campaign) => {
-    // Search filter
     const matchesSearch =
       campaign.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       campaign.description.toLowerCase().includes(searchQuery.toLowerCase())
 
-    // Category filter
     const matchesCategory =
       selectedCategory === "all" || campaign.category.toLowerCase() === selectedCategory.toLowerCase()
 
-    // Progress filter
     const progress = (campaign.currentAmount / campaign.goal) * 100
     const matchesProgress = progress >= progressFilter[0]
 
@@ -110,7 +126,11 @@ export default function CampaignsPage() {
       </div>
 
       <div className="mt-8">
-        {filteredCampaigns.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-medium">Loading campaigns...</h3>
+          </div>
+        ) : filteredCampaigns.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCampaigns.map((campaign) => (
               <CampaignCard key={campaign.id} campaign={campaign} />
